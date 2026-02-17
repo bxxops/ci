@@ -1,20 +1,30 @@
 name: Guard
 
-on:
-  workflow_dispatch:
+on: workflow_dispatch
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 permissions:
   actions: write
-
-env:
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  contents: write
 
 jobs:
-  run:
+  guard:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
       - run: >-
           gh run list -w ci.yml -R "$GITHUB_REPOSITORY"
           --limit 1 --json status -q '.[0].status' 2>/dev/null
           | grep -qE 'progress|queued'
           || gh workflow run ci.yml -R "$GITHUB_REPOSITORY"
+      - run: |
+          [ $(($(date +%s) - $(git log -1 --format=%ct))) -gt 2592000 ] \
+            && date -u '+%Y-%m-%dT%H:%M:%SZ' > README.md \
+            && git -c user.name=bot -c user.email=bot commit -am keep-alive --amend \
+            && git push -f \
+            || true
